@@ -15,7 +15,7 @@ GeneB,0.25,0.60,0.66,0.40,0.14
 The first column contains gene identifiers. The remaining columns contain sample identifiers and numeric values. Directories are not accepted.
 
 ```bash
-cargo run -- data/micro_mus.csv -o data_results -j 0
+cargo run -- data/example.csv -o data_results -j 0
 cargo run -- example_data/demo.tsv -o demo_results -K 4 --cs 2 -j 1 --seed 42
 ```
 
@@ -65,7 +65,7 @@ For every requested `K`, genes are treated as observations and samples are treat
 The random seed is controlled by `--seed`. The default `K` values are `4, 8, 12, 16, 20`; override them with `-K`:
 
 ```bash
-cargo run -- data/micro_mus.csv -K 3 5 7 10
+cargo run -- data/example.csv -K 3 5 7 10
 ```
 
 ## Consensus Candidates
@@ -86,7 +86,7 @@ Candidates are considered from best to worst. A candidate is selected only when 
 Use `--clusters` to require an exact number of final clusters:
 
 ```bash
-cargo run -- data/micro_mus.csv --clusters 4
+cargo run -- data/example.csv --clusters 4
 ```
 
 The program selects the best non-overlapping candidates up to that count and fails if the requested number cannot be formed.
@@ -123,7 +123,7 @@ clust-rs <matrix-file> [OPTIONS]
 A reproducible run is:
 
 ```bash
-cargo run -- data/micro_mus.csv \
+cargo run -- data/example.csv \
   -o data_results \
   -n 1000 \
   -K 4 8 12 16 20 \
