@@ -1,0 +1,16 @@
+# Rust build artifacts
+/target/
+
+# Generated analysis outputs
+/clust_rs_results/
+/data_results/
+/demo_results/
+
+# macOS metadata
+.DS_Store
+
+# Editor and local environment files
+.vscode/
+.idea/
+*.swp
+*.swo
