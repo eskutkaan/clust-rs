@@ -12,7 +12,7 @@ Requirements:
 Build and run the bundled data example:
 
 ```bash
-cargo run -- data/micro_mus.csv -o data_results -j 0
+cargo run -- data/example.csv -o data_results -j 0
 ```
 
 For a faster small example:
@@ -41,7 +41,7 @@ GeneB,0.25,0.60,0.66,0.40,0.14
 Pass one CSV, TSV, or TXT matrix file:
 
 ```bash
-cargo run -- data/micro_mus.csv -o one_dataset_results
+cargo run -- data/example.csv -o one_dataset_results
 ```
 
 ## Common Options
@@ -61,7 +61,7 @@ cargo run -- data/micro_mus.csv -o one_dataset_results
 For example:
 
 ```bash
-cargo run -- data/micro_mus.csv \
+cargo run -- data/example.csv \
   -o data_results \
   -n 1000 \
   -K 4 8 12 16 20 \
