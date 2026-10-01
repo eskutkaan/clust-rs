@@ -316,13 +316,14 @@ fn write_expression_pdf(
     let columns = 2usize;
     let panel_width = (width - 60.0) / columns as f64;
     let cluster_count = clusters.ncols();
-    let page_count = cluster_count.clamp(1, 3);
+    let clusters_per_page = 4usize;
+    let page_count = cluster_count.div_ceil(clusters_per_page).max(1);
 
     for page in 0..page_count {
-        let base = cluster_count / page_count;
-        let remainder = cluster_count % page_count;
-        let start = page * base + page.min(remainder);
-        let page_cluster_count = base + usize::from(page < remainder);
+        let start = page * clusters_per_page;
+        let page_cluster_count = cluster_count
+            .saturating_sub(start)
+            .min(clusters_per_page);
         let end = start + page_cluster_count;
         let page_clusters = end.saturating_sub(start).max(1);
         let rows = (page_clusters + columns - 1) / columns;

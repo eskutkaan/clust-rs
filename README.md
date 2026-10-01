@@ -26,7 +26,7 @@ The output directory contains:
 - `Clusters_Objects.tsv`: selected cluster members
 - `Gene_to_cluster.tsv`: gene-to-cluster assignments
 - `Summary.tsv`: run parameters and summary statistics
-- `Cluster_Expression_Profiles.pdf`: up to three pages containing all cluster expression line plots and heatmaps
+- `Cluster_Expression_Profiles.pdf`: cluster expression line plots and heatmaps
 
 ## Input Format
 

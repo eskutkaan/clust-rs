@@ -100,7 +100,7 @@ For an output directory such as `data_results/`, the program writes:
 | `Clusters_Objects.tsv` | One row per selected cluster followed by its member genes. |
 | `Gene_to_cluster.tsv` | Each retained gene and its first assigned cluster. |
 | `Summary.tsv` | Run parameters and summary statistics. |
-| `Cluster_Expression_Profiles.pdf` | Up to three pages containing all selected clusters, with individual expression profiles, cluster-average lines, and sample-labeled heatmaps without gene-axis labels. |
+| `Cluster_Expression_Profiles.pdf` | All selected clusters, with no more than four clusters per page, individual expression profiles, cluster-average lines, and sample-labeled heatmaps without gene-axis labels. |
 
 The PDF uses the normalised and filtered matrix used for clustering.
 
