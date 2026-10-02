@@ -1,6 +1,6 @@
 //! End-to-end single-matrix pipeline.
 use crate::cluster::cluster_sizes;
-use crate::data::{load_dataset, Dataset};
+use crate::data::{aggregate_replicates, load_dataset, Dataset};
 use crate::error::Result;
 use crate::normalise::{apply_normalisations, filter_genes};
 use crate::select::select_clusters;
@@ -14,6 +14,7 @@ use std::time::Instant;
 #[derive(Clone, Debug)]
 pub struct PipelineConfig {
     pub data_path: PathBuf,
+    pub replicates_path: Option<PathBuf>,
     pub output_dir: PathBuf,
     pub norm_codes: Vec<u32>,
     pub ks: Vec<usize>,
@@ -31,6 +32,7 @@ impl Default for PipelineConfig {
     fn default() -> Self {
         Self {
             data_path: PathBuf::from("."),
+            replicates_path: None,
             output_dir: PathBuf::from("clust_rs_results"),
             norm_codes: vec![1000],
             ks: vec![4, 8, 12, 16, 20],
@@ -76,6 +78,12 @@ pub fn run(cfg: &PipelineConfig) -> Result<PipelineResult> {
         ));
     }
     let dataset = load_dataset(&cfg.data_path)?;
+    let dataset = if let Some(path) = &cfg.replicates_path {
+        eprintln!("   Aggregating replicates from {}", path.display());
+        aggregate_replicates(&dataset, path)?
+    } else {
+        dataset
+    };
     eprintln!(
         "   {}: {} genes × {} samples",
         dataset.name,
@@ -321,9 +329,7 @@ fn write_expression_pdf(
 
     for page in 0..page_count {
         let start = page * clusters_per_page;
-        let page_cluster_count = cluster_count
-            .saturating_sub(start)
-            .min(clusters_per_page);
+        let page_cluster_count = cluster_count.saturating_sub(start).min(clusters_per_page);
         let end = start + page_cluster_count;
         let page_clusters = end.saturating_sub(start).max(1);
         let rows = (page_clusters + columns - 1) / columns;
@@ -357,68 +363,89 @@ fn write_expression_pdf(
             let dataset_panel_height = (panel_height - 34.0) / panel_count as f64;
 
             for (dataset_idx, dataset) in datasets.iter().enumerate() {
-            let x0 = panel_x;
-            let y0 = panel_y + (panel_count - dataset_idx - 1) as f64 * dataset_panel_height;
-            let plot_w = panel_width * 0.55;
-            let heatmap_x = panel_x + panel_width * 0.60;
-            let heatmap_w = panel_width * 0.34;
-            let plot_h = (dataset_panel_height - 48.0).max(12.0);
-            let matrix = &matrices[dataset_idx];
-            let present: Vec<usize> = members
-                .iter()
-                .copied()
-                .filter(|&i| gdm[[i, dataset_idx]])
-                .collect();
-            if present.is_empty() || matrix.ncols() == 0 {
-                continue;
-            }
+                let x0 = panel_x;
+                let y0 = panel_y + (panel_count - dataset_idx - 1) as f64 * dataset_panel_height;
+                let plot_w = panel_width * 0.55;
+                let heatmap_x = panel_x + panel_width * 0.60;
+                let heatmap_w = panel_width * 0.34;
+                let plot_h = (dataset_panel_height - 48.0).max(12.0);
+                let matrix = &matrices[dataset_idx];
+                let present: Vec<usize> = members
+                    .iter()
+                    .copied()
+                    .filter(|&i| gdm[[i, dataset_idx]])
+                    .collect();
+                if present.is_empty() || matrix.ncols() == 0 {
+                    continue;
+                }
 
-            let values: Vec<f64> = present
-                .iter()
-                .flat_map(|&i| matrix.row(i).to_vec())
-                .collect();
-            let mut min = values.iter().copied().fold(f64::INFINITY, f64::min);
-            let mut max = values.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-            if !min.is_finite() || !max.is_finite() {
-                continue;
-            }
-            if (max - min).abs() < 1e-12 {
-                min -= 1.0;
-                max += 1.0;
-            }
-            let pad = (max - min) * 0.05;
-            min -= pad;
-            max += pad;
+                let values: Vec<f64> = present
+                    .iter()
+                    .flat_map(|&i| matrix.row(i).to_vec())
+                    .collect();
+                let mut min = values.iter().copied().fold(f64::INFINITY, f64::min);
+                let mut max = values.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+                if !min.is_finite() || !max.is_finite() {
+                    continue;
+                }
+                if (max - min).abs() < 1e-12 {
+                    min -= 1.0;
+                    max += 1.0;
+                }
+                let pad = (max - min) * 0.05;
+                min -= pad;
+                max += pad;
 
-            content.push_str("0 0 0 rg\n");
-            content.push_str(&format!(
-                "BT /F1 7 Tf {} {} Td ({}) Tj ET\n",
-                x0,
-                y0 + plot_h + 8.0,
-                pdf_escape(&dataset.name)
-            ));
-            content.push_str("0.82 0.82 0.82 RG 0.5 w\n");
-            content.push_str(&format!(
-                "{} {} m {} {} l S\n{} {} m {} {} l S\n",
-                x0,
-                y0,
-                x0 + plot_w,
-                y0,
-                x0,
-                y0,
-                x0,
-                y0 + plot_h
-            ));
-            for &gene in &present {
-                content.push_str("0.72 0.72 0.72 RG 0.45 w\n");
-                for sample in 0..matrix.ncols() {
-                    let value = matrix[[gene, sample]];
-                    if !value.is_finite() {
-                        continue;
+                content.push_str("0 0 0 rg\n");
+                content.push_str(&format!(
+                    "BT /F1 7 Tf {} {} Td ({}) Tj ET\n",
+                    x0,
+                    y0 + plot_h + 8.0,
+                    pdf_escape(&dataset.name)
+                ));
+                content.push_str("0.82 0.82 0.82 RG 0.5 w\n");
+                content.push_str(&format!(
+                    "{} {} m {} {} l S\n{} {} m {} {} l S\n",
+                    x0,
+                    y0,
+                    x0 + plot_w,
+                    y0,
+                    x0,
+                    y0,
+                    x0,
+                    y0 + plot_h
+                ));
+                for &gene in &present {
+                    content.push_str("0.72 0.72 0.72 RG 0.45 w\n");
+                    for sample in 0..matrix.ncols() {
+                        let value = matrix[[gene, sample]];
+                        if !value.is_finite() {
+                            continue;
+                        }
+                        let x = x0
+                            + sample as f64 * plot_w
+                                / (matrix.ncols().saturating_sub(1).max(1) as f64);
+                        let y = y0 + (value - min) / (max - min) * plot_h;
+                        content.push_str(&format!(
+                            "{} {} {}\n",
+                            if sample == 0 {
+                                format!("{} {} m", x, y)
+                            } else {
+                                format!("{} {} l", x, y)
+                            },
+                            "",
+                            ""
+                        ));
                     }
+                    content.push_str("S\n");
+                }
+                content.push_str("0.08 0.25 0.55 RG 1.8 w\n");
+                for sample in 0..matrix.ncols() {
+                    let mean = present.iter().map(|&i| matrix[[i, sample]]).sum::<f64>()
+                        / present.len() as f64;
                     let x = x0
                         + sample as f64 * plot_w / (matrix.ncols().saturating_sub(1).max(1) as f64);
-                    let y = y0 + (value - min) / (max - min) * plot_h;
+                    let y = y0 + (mean - min) / (max - min) * plot_h;
                     content.push_str(&format!(
                         "{} {} {}\n",
                         if sample == 0 {
@@ -431,90 +458,72 @@ fn write_expression_pdf(
                     ));
                 }
                 content.push_str("S\n");
-            }
-            content.push_str("0.08 0.25 0.55 RG 1.8 w\n");
-            for sample in 0..matrix.ncols() {
-                let mean = present.iter().map(|&i| matrix[[i, sample]]).sum::<f64>()
-                    / present.len() as f64;
-                let x =
-                    x0 + sample as f64 * plot_w / (matrix.ncols().saturating_sub(1).max(1) as f64);
-                let y = y0 + (mean - min) / (max - min) * plot_h;
-                content.push_str(&format!(
-                    "{} {} {}\n",
-                    if sample == 0 {
-                        format!("{} {} m", x, y)
-                    } else {
-                        format!("{} {} l", x, y)
-                    },
-                    "",
-                    ""
-                ));
-            }
-            content.push_str("S\n");
 
-            content.push_str("0 0 0 rg\n");
-            content.push_str(&format!(
-                "BT /F1 7 Tf {} {} Td (Heatmap) Tj ET\n",
-                heatmap_x,
-                y0 + plot_h + 8.0
-            ));
-            let cell_w = heatmap_w / matrix.ncols() as f64;
-            let cell_h = plot_h / present.len() as f64;
-            for (row, &gene) in present.iter().enumerate() {
-                let cell_y = y0 + (present.len() - row - 1) as f64 * cell_h;
-                for sample in 0..matrix.ncols() {
-                    let (red, green, blue) = heatmap_colour(matrix[[gene, sample]], min, max);
-                    let cell_x = heatmap_x + sample as f64 * cell_w;
+                content.push_str("0 0 0 rg\n");
+                content.push_str(&format!(
+                    "BT /F1 7 Tf {} {} Td (Heatmap) Tj ET\n",
+                    heatmap_x,
+                    y0 + plot_h + 8.0
+                ));
+                let cell_w = heatmap_w / matrix.ncols() as f64;
+                let cell_h = plot_h / present.len() as f64;
+                for (row, &gene) in present.iter().enumerate() {
+                    let cell_y = y0 + (present.len() - row - 1) as f64 * cell_h;
+                    for sample in 0..matrix.ncols() {
+                        let (red, green, blue) = heatmap_colour(matrix[[gene, sample]], min, max);
+                        let cell_x = heatmap_x + sample as f64 * cell_w;
+                        content.push_str(&format!(
+                            "{} {} {} rg {} {} {} {} re f\n",
+                            red,
+                            green,
+                            blue,
+                            cell_x,
+                            cell_y,
+                            cell_w + 0.15,
+                            cell_h + 0.15
+                        ));
+                    }
+                }
+                content.push_str(&format!(
+                    "0.35 0.35 0.35 RG 0.5 w {} {} {} {} re S\n",
+                    heatmap_x, y0, heatmap_w, plot_h
+                ));
+                let x_denominator = matrix.ncols().saturating_sub(1).max(1) as f64;
+                for (sample, sample_id) in
+                    dataset.sample_ids.iter().take(matrix.ncols()).enumerate()
+                {
+                    let x = x0 + sample as f64 * plot_w / x_denominator;
+                    let label_width = sample_id.chars().count() as f64 * 4.0;
                     content.push_str(&format!(
-                        "{} {} {} rg {} {} {} {} re f\n",
-                        red,
-                        green,
-                        blue,
-                        cell_x,
-                        cell_y,
-                        cell_w + 0.15,
-                        cell_h + 0.15
+                        "0.82 0.82 0.82 RG 0.5 w {} {} m {} {} l S\n",
+                        x,
+                        y0,
+                        x,
+                        y0 - 4.0
+                    ));
+                    content.push_str("0 0 0 rg\n");
+                    content.push_str(&format!(
+                        "BT /F1 5 Tf {} {} Td ({}) Tj ET\n",
+                        x - label_width / 2.0,
+                        y0 - 14.0,
+                        pdf_escape(sample_id)
+                    ));
+                    let heatmap_label_x = heatmap_x + (sample as f64 + 0.5) * cell_w;
+                    content.push_str(&format!(
+                        "0.35 0.35 0.35 RG 0.5 w {} {} m {} {} l S\n",
+                        heatmap_label_x,
+                        y0,
+                        heatmap_label_x,
+                        y0 - 4.0
+                    ));
+                    content.push_str("0 0 0 rg\n");
+                    content.push_str(&format!(
+                        "BT /F1 5 Tf {} {} Td ({}) Tj ET\n",
+                        heatmap_label_x - label_width / 2.0,
+                        y0 - 14.0,
+                        pdf_escape(sample_id)
                     ));
                 }
-            }
-            content.push_str(&format!(
-                "0.35 0.35 0.35 RG 0.5 w {} {} {} {} re S\n",
-                heatmap_x, y0, heatmap_w, plot_h
-            ));
-            let x_denominator = matrix.ncols().saturating_sub(1).max(1) as f64;
-            for (sample, sample_id) in dataset.sample_ids.iter().take(matrix.ncols()).enumerate() {
-                let x = x0 + sample as f64 * plot_w / x_denominator;
-                let label_width = sample_id.chars().count() as f64 * 4.0;
-                content.push_str(&format!(
-                    "0.82 0.82 0.82 RG 0.5 w {} {} m {} {} l S\n",
-                    x,
-                    y0,
-                    x,
-                    y0 - 4.0
-                ));
-                content.push_str("0 0 0 rg\n");
-                content.push_str(&format!(
-                    "BT /F1 5 Tf {} {} Td ({}) Tj ET\n",
-                    x - label_width / 2.0,
-                    y0 - 14.0,
-                    pdf_escape(sample_id)
-                ));
-                let heatmap_label_x = heatmap_x + (sample as f64 + 0.5) * cell_w;
-                content.push_str(&format!(
-                    "0.35 0.35 0.35 RG 0.5 w {} {} m {} {} l S\n",
-                    heatmap_label_x,
-                    y0,
-                    heatmap_label_x,
-                    y0 - 4.0
-                ));
-                content.push_str("0 0 0 rg\n");
-                content.push_str(&format!(
-                    "BT /F1 5 Tf {} {} Td ({}) Tj ET\n",
-                    heatmap_label_x - label_width / 2.0,
-                    y0 - 14.0,
-                    pdf_escape(sample_id)
-                ));
-            }
             }
         }
 

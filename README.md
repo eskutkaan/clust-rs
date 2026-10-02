@@ -44,6 +44,46 @@ Pass one CSV, TSV, or TXT matrix file:
 cargo run -- data/example.csv -o one_dataset_results
 ```
 
+### Accounting for replicates
+
+Provide `--replicates` with a two-column mapping file. The first column must
+contain sample IDs matching the matrix header, and the second column identifies
+the replicate group. A header row is optional; CSV, TSV, and semicolon-delimited
+files are supported:
+
+```text
+sample_id    replicate_id
+ctrl_1       ctrl
+ctrl_2       ctrl
+treated_1    treated
+treated_2    treated
+```
+
+The program validates that every matrix sample has exactly one assignment, then
+replaces each group of replicate columns with its arithmetic-mean expression
+profile before normalization, filtering, and clustering:
+
+```bash
+cargo run -- data/example.csv --replicates data/replicates.tsv \
+  -o replicate_results
+```
+
+The repository includes a small reproducible example:
+
+```bash
+cargo run -- example_data/replicate_demo.tsv \
+  --replicates example_data/replicate_demo_replicates.tsv \
+  -o replicate_demo_results \
+  -K 2 \
+  --cs 2 \
+  -j 1 \
+  --seed 42
+```
+
+This example contains 200 genes and starts with twelve sample columns (four
+replicates per condition), then produces three replicate-aware columns:
+`Control`, `Treated`, and `Recovery`.
+
 ## Common Options
 
 ```text

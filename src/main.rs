@@ -13,6 +13,7 @@ USAGE:
 
 OPTIONS:
   -o <dir>         Output directory (default: clust_rs_results)
+  --replicates <file> Sample-to-replicate mapping (CSV/TSV)
   -n <codes...>    Normalisation codes (default: 1000)
   -K <ints...>     K values (default: 4 8 12 16 20)
   -t <float>       Tightness (default: 1.0)
@@ -42,6 +43,14 @@ fn main() {
             "-o" => {
                 i += 1;
                 cfg.output_dir = PathBuf::from(&args[i]);
+            }
+            "--replicates" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("--replicates requires a file path");
+                    process::exit(1);
+                }
+                cfg.replicates_path = Some(PathBuf::from(&args[i]));
             }
             "-n" => {
                 cfg.norm_codes.clear();
