@@ -1,6 +1,11 @@
 # Clust-RS Processing Guide
 
-Clust-RS processes one gene-expression matrix at a time. It normalises and filters the matrix, runs k-means for several requested values of `K`, builds consensus cluster candidates, selects non-overlapping clusters, and writes TSV and PDF results.
+Clust-RS processes one gene-expression matrix at a time. Optionally, a
+sample-to-replicate mapping can be supplied so that replicate columns are
+aggregated before normalization. The program then normalises and filters the
+matrix, runs k-means for several requested values of `K`, builds consensus
+cluster candidates, selects non-overlapping clusters, and writes TSV and PDF
+results.
 
 ## Input
 
@@ -18,6 +23,57 @@ The first column contains gene identifiers. The remaining columns contain sample
 cargo run -- data/example.csv -o data_results -j 0
 cargo run -- example_data/demo.tsv -o demo_results -K 4 --cs 2 -j 1 --seed 42
 ```
+
+## Replicate-Aware Processing
+
+Use `--replicates` when multiple matrix columns represent the same replicate
+group or experimental condition:
+
+```bash
+cargo run -- example_data/replicate_demo.tsv \
+  --replicates example_data/replicate_demo_replicates.tsv \
+  -o replicate_demo_results \
+  -K 2 \
+  --cs 2 \
+  -j 1 \
+  --seed 42
+```
+
+The replicate file must contain exactly two columns:
+
+```text
+sample_id	replicate_id
+Control_1	Control
+Control_2	Control
+Treated_1	Treated
+Treated_2	Treated
+```
+
+CSV, TSV, and semicolon-delimited files are supported. A header row is
+optional. The first column must match a sample identifier in the expression
+matrix; the second column is the output identifier for the aggregated
+replicate column. Replicate groups retain the order in which they first appear
+in the mapping file.
+
+Before normalization, Clust-RS validates that:
+
+- the mapping file is not empty;
+- every mapping row has exactly two non-empty fields;
+- no matrix sample is assigned more than once;
+- no mapping references an unknown matrix sample; and
+- every matrix sample has an assignment.
+
+For each replicate group and gene, the expression values of all assigned
+sample columns are combined using their arithmetic mean:
+
+$$
+x_{\text{replicate}} = \frac{1}{n}\sum_{i=1}^{n} x_i
+$$
+
+The resulting replicate-aware matrix is used for all subsequent processing:
+normalization, flat-gene filtering, k-means, consensus construction, cluster
+selection, and expression-profile output. Without `--replicates`, the original
+sample columns are used unchanged.
 
 ## Normalisation
 
@@ -50,7 +106,10 @@ $$
 
 ## Filtering
 
-After normalisation, genes with insufficient variation are removed. A gene is discarded when its standard deviation is below `1e-6`; rows with fewer than two finite values are also discarded.
+After replicate aggregation, when enabled, and normalization, genes with
+insufficient variation are removed. A gene is discarded when its standard
+deviation is below `1e-6`; rows with fewer than two finite values are also
+discarded.
 
 ## K-Means
 
@@ -110,7 +169,8 @@ The PDF uses the normalised and filtered matrix used for clustering.
 clust-rs <matrix-file> [OPTIONS]
 
 -o <dir>         Output directory (default: clust_rs_results)
--n <codes...>    Normalisation codes (default: 1000)
+--replicates <file> Sample-to-replicate mapping (CSV/TSV/semicolon-delimited)
+-n <codes...>     Normalisation codes (default: 1000)
 -K <ints...>     K values (default: 4 8 12 16 20)
 -t <float>       Tightness weight (default: 1.0)
 --cs <int>       Minimum cluster size (default: 11)
@@ -130,6 +190,21 @@ cargo run -- data/example.csv \
   -t 1.0 \
   --cs 11 \
   -j 0 \
+  --seed 42 \
+  --diff 0.1
+```
+
+With replicate-aware processing:
+
+```bash
+cargo run -- example_data/replicate_demo.tsv \
+  --replicates example_data/replicate_demo_replicates.tsv \
+  -o replicate_demo_results \
+  -n 1000 \
+  -K 4 8 \
+  -t 1.0 \
+  --cs 11 \
+  -j 1 \
   --seed 42 \
   --diff 0.1
 ```
